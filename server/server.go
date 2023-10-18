@@ -29,6 +29,8 @@ func Serve(db *sql.DB, brokers map[string]stations.Broker) {
 	StationRapidUpdatesRoute(db, brokers, r)
 	StationUpdatesRoute(db, brokers, r)
 	StationInfoRoute(db, r)
+	NearestStationRoute(db, r)
+	LocationConditionsRoute(db, r)
 
 	fmt.Println("Starting server..")
 

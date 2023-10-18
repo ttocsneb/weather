@@ -9,7 +9,7 @@ import (
 	"github.com/ttocsneb/weather/types"
 )
 
-func genQueryLookup(table string, properties ...string) string {
+func GenQueryLookup(table string, properties ...string) string {
 	joins := ""
 	for _, property := range properties {
 		joins += fmt.Sprintf("JOIN lookup_strings %v ON %v.%v_id = %v.id\n",
@@ -188,7 +188,7 @@ func fetchSensorsFromEntry(db *sql.DB, id int) (map[string][]types.SensorValue, 
 		%v
 		WHERE entry_id = ? 
 		ORDER BY name_id ASC, unit_id ASC;`,
-		genQueryLookup("sensor_value", "name", "unit"),
+		GenQueryLookup("sensor_value", "name", "unit"),
 	)
 
 	rows, err := db.Query(query, id)
@@ -227,7 +227,7 @@ func FetchEntry(db *sql.DB, condition string, args ...any) (types.WeatherEntry, 
 											time FROM weather_entry
 			%v %v
 			LIMIT 1;`,
-		genQueryLookup("weather_entry", "station", "server"),
+		GenQueryLookup("weather_entry", "station", "server"),
 		condition)
 
 	row := db.QueryRow(query, args...)
@@ -259,7 +259,7 @@ func FetchEntries(db *sql.DB, condition string, args ...any) ([]types.WeatherEnt
 											server.value, 
 											time FROM weather_entry
 					%v %v;`,
-		genQueryLookup("weather_entry", "station", "server"),
+		GenQueryLookup("weather_entry", "station", "server"),
 		condition)
 
 	rows, err := db.Query(query, args...)
@@ -331,7 +331,7 @@ func FetchStationInfo(db *sql.DB, server string, station string) (types.StationE
 			rapid_weather,
 			updated 
 		FROM station 
-		` + genQueryLookup("station", "make", "model", "software", "version",
+		` + GenQueryLookup("station", "make", "model", "software", "version",
 		"district", "city", "region", "country", "server", "station") + `
 		WHERE server.value = ?
 		AND station.value = ? 
@@ -452,4 +452,81 @@ func UpdateStationInfo(db *sql.DB, entry types.StationEntry) error {
 		entry.RapidWeather, entry.Updated, lookup[entry.Server],
 		lookup[entry.Station])
 	return err
+}
+
+func QueryStationInfos(db *sql.DB, condition string, args ...interface{}) ([]types.StationEntry, error) {
+	query := fmt.Sprintf(`SELECT 
+			server.value, 
+			station.value,
+			make.value,
+			model.value,
+			software.value,
+			version.value,
+			latitude,
+			longitude,
+			elevation,
+			district.value,
+			city.value,
+			region.value,
+			country.value,
+			rapid_weather,
+			updated 
+		FROM station 
+		%v %v;`,
+		GenQueryLookup("station", "make", "model", "software", "version",
+			"district", "city", "region", "country", "server", "station"),
+		condition)
+
+	result := []types.StationEntry{}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return result, err
+	}
+
+	for rows.Next() {
+		var server_val string
+		var station_val string
+		var make_val string
+		var model string
+		var software string
+		var version string
+		var latitude float64
+		var longitude float64
+		var elevation float64
+		var district string
+		var city string
+		var region string
+		var country string
+		var rapid_weather bool
+		var updated time.Time
+
+		err := rows.Scan(&server_val, &station_val, &make_val, &model,
+			&software, &version, &latitude, &longitude, &elevation, &district,
+			&city, &region, &country, &rapid_weather, &updated)
+		if err != nil {
+			return result, err
+		}
+
+		info := types.StationEntry{
+			Server:       server_val,
+			Station:      station_val,
+			Make:         make_val,
+			Model:        model,
+			Software:     software,
+			Version:      version,
+			Latitude:     latitude,
+			Longitude:    longitude,
+			Elevation:    elevation,
+			District:     district,
+			City:         city,
+			Region:       region,
+			Country:      country,
+			RapidWeather: rapid_weather,
+			Updated:      updated,
+		}
+		result = append(result, info)
+	}
+
+	return result, nil
 }
