@@ -1,10 +1,18 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
+
+type StationKey struct {
+	Server  string
+	Station string
+}
 
 type SensorValue struct {
 	Unit  string  `json:"unit"`
-	Value float32 `json:"value"`
+	Value float64 `json:"value"`
 }
 
 type WeatherMessage struct {
@@ -20,13 +28,17 @@ type WeatherEntry struct {
 	Sensors map[string][]SensorValue
 }
 
-func (self WeatherMessage) ToEntry(server string) WeatherEntry {
+func (self *WeatherMessage) ToEntry(server string) WeatherEntry {
 	return WeatherEntry{
 		Station: self.ID,
 		Server:  server,
 		Time:    self.Time,
 		Sensors: self.Sensors,
 	}
+}
+
+func (self *WeatherEntry) MapId() string {
+	return MapId(self.Server, self.Station)
 }
 
 type StationMessage struct {
@@ -60,6 +72,14 @@ type StationEntry struct {
 	Country      string
 	RapidWeather bool
 	Updated      time.Time
+}
+
+func (self *StationEntry) MapId() string {
+	return MapId(self.Server, self.Station)
+}
+
+func MapId(server string, station string) string {
+	return fmt.Sprintf("%v-%v", server, station)
 }
 
 func (self StationMessage) ToEntry(server string, station string, updated time.Time) StationEntry {

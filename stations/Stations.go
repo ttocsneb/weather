@@ -9,6 +9,7 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/ttocsneb/weather/database"
 	"github.com/ttocsneb/weather/types"
+	"github.com/ttocsneb/weather/util"
 )
 
 type ChanMux struct {
@@ -33,8 +34,26 @@ func newChanMux(broker *Broker, station string, listener chan types.WeatherMessa
 			fmt.Printf("Could not parse rapid-weather message: %v\n", err)
 			return
 		}
+
+		message := types.WeatherMessage{
+			Time:    payload.Time,
+			ID:      payload.ID,
+			Sensors: make(map[string][]types.SensorValue),
+		}
+
+		for sensor, values := range payload.Sensors {
+			message.Sensors[sensor] = make([]types.SensorValue, len(values))
+			for i, value := range values {
+				val, unit := util.NormalizeSensor(value.Value, value.Unit, sensor)
+				message.Sensors[sensor][i] = types.SensorValue{
+					Unit:  unit,
+					Value: val,
+				}
+			}
+		}
+
 		for _, ch := range self.updates {
-			ch <- payload
+			ch <- message
 		}
 	}))
 	if err != nil {
@@ -95,11 +114,12 @@ func (self *ChanMux) delListener(listener chan types.WeatherMessage) bool {
 }
 
 type Broker struct {
-	Client       mqtt.Client
-	Broker       string
-	db           *sql.DB
-	rapidUpdates map[string]*ChanMux
-	updates      map[string][]chan types.WeatherMessage
+	Client         mqtt.Client
+	Broker         string
+	db             *sql.DB
+	rapidUpdates   map[string]*ChanMux
+	stationUpdates map[string][]chan types.WeatherMessage
+	updates        []chan types.WeatherMessage
 }
 
 func WaitOrErr(fut mqtt.Token) error {
@@ -115,14 +135,31 @@ func (self *Broker) WeatherListener() mqtt.MessageHandler {
 			return
 		}
 
-		hooks, exists := self.updates[payload.ID]
-		if exists {
-			for _, hook := range hooks {
-				hook <- payload
+		message := types.WeatherMessage{
+			Time:    payload.Time,
+			ID:      payload.ID,
+			Sensors: make(map[string][]types.SensorValue),
+		}
+
+		for sensor, values := range payload.Sensors {
+			message.Sensors[sensor] = make([]types.SensorValue, len(values))
+			for i, value := range values {
+				val, unit := util.NormalizeSensor(value.Value, value.Unit, sensor)
+				message.Sensors[sensor][i] = types.SensorValue{
+					Unit:  unit,
+					Value: val,
+				}
 			}
 		}
 
-		_, err := database.InsertWeatherEntry(self.db, payload.ToEntry(self.Broker))
+		hooks, exists := self.stationUpdates[payload.ID]
+		if exists {
+			for _, hook := range hooks {
+				hook <- message
+			}
+		}
+
+		_, err := database.InsertWeatherEntry(self.db, message.ToEntry(self.Broker))
 		if err != nil {
 			fmt.Printf("Unable to save message to db: %v\n", err)
 			return
@@ -215,16 +252,16 @@ func (self *Broker) UnsubscribeRapidWeatherUpdates(station string, weather chan 
 }
 
 func (self *Broker) SubscribeWeatherUpdates(station string, weather chan types.WeatherMessage) {
-	list, exists := self.updates[station]
+	list, exists := self.stationUpdates[station]
 	if !exists {
 		list = []chan types.WeatherMessage{}
 	}
 
 	list = append(list, weather)
-	self.updates[station] = list
+	self.stationUpdates[station] = list
 }
 func (self *Broker) UnsubscribeWeatherUpdates(station string, weather chan types.WeatherMessage) bool {
-	list, exists := self.updates[station]
+	list, exists := self.stationUpdates[station]
 	if !exists {
 		return false
 	}
@@ -232,10 +269,23 @@ func (self *Broker) UnsubscribeWeatherUpdates(station string, weather chan types
 		if val == weather {
 			list = append(list[:i], list[i+1:]...)
 			if len(list) == 0 {
-				delete(self.updates, station)
+				delete(self.stationUpdates, station)
 			} else {
-				self.updates[station] = list
+				self.stationUpdates[station] = list
 			}
+			return true
+		}
+	}
+	return false
+}
+
+func (self *Broker) SubscribeAllWeatherUpdates(weather chan types.WeatherMessage) {
+	self.updates = append(self.updates, weather)
+}
+func (self *Broker) UnsubscribeAllWeatherUpdates(weather chan types.WeatherMessage) bool {
+	for i, val := range self.updates {
+		if val == weather {
+			self.updates = append(self.updates[:i], self.updates[i+1:]...)
 			return true
 		}
 	}
@@ -254,11 +304,12 @@ func NewBroker(db *sql.DB, id string, broker string, server string) (Broker, err
 	}
 
 	self := Broker{
-		Client:       client,
-		Broker:       broker,
-		db:           db,
-		rapidUpdates: make(map[string]*ChanMux),
-		updates:      make(map[string][]chan types.WeatherMessage),
+		Client:         client,
+		Broker:         broker,
+		db:             db,
+		rapidUpdates:   make(map[string]*ChanMux),
+		stationUpdates: make(map[string][]chan types.WeatherMessage),
+		updates:        []chan types.WeatherMessage{},
 	}
 
 	if err := WaitOrErr(client.Subscribe("/station/weather/+", 0,
