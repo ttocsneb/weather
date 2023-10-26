@@ -27,7 +27,12 @@ func main() {
 		return
 	}
 
-	db, err := sql.Open("sqlite3", "db.sqlite3")
+	if conf.Database == "" {
+		fmt.Println("database is a required field")
+		return
+	}
+
+	db, err := sql.Open("sqlite3", conf.Database)
 	if err != nil {
 		panic(err)
 	}
@@ -49,5 +54,5 @@ func main() {
 
 	fmt.Println("Started Server")
 
-	server.Serve(db, brokers)
+	server.Serve(conf.Port, db, brokers)
 }

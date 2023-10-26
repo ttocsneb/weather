@@ -21,7 +21,7 @@ func ErrorMessage(w http.ResponseWriter, code int, message string) {
 	w.Write(data)
 }
 
-func Serve(db *sql.DB, brokers map[string]stations.Broker) {
+func Serve(port uint16, db *sql.DB, brokers map[string]stations.Broker) {
 	r := mux.NewRouter()
 
 	StationConditionsRoute(db, r)
@@ -35,8 +35,8 @@ func Serve(db *sql.DB, brokers map[string]stations.Broker) {
 	RegionConditionsRoute(db, r)
 	RegionConditionsUpdateRoute(db, brokers, r)
 
-	fmt.Println("Starting server..")
+	fmt.Printf("Starting server on port %v\n", port)
 
-	err := http.ListenAndServe(":8080", r)
+	err := http.ListenAndServe(fmt.Sprintf(":%v", port), r)
 	panic(err)
 }

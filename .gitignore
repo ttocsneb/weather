@@ -2,3 +2,5 @@ weather
 config.toml
 
 *.sqlite3
+
+systemd
