@@ -68,7 +68,7 @@ func newChanMux(broker *Broker, station string, listener chan types.WeatherMessa
 	if err != nil {
 		return nil, err
 	}
-	sendUpdates := func() {
+	keepAlive := func() {
 		timeout := time.After(time.Second * 50)
 		for true {
 			select {
@@ -78,6 +78,7 @@ func newChanMux(broker *Broker, station string, listener chan types.WeatherMessa
 					fmt.Printf("Could not Unsubscribe from rapid-weather updates: %v\n", err)
 				}
 				fmt.Println("Closing rapid-weather listener")
+				on_done(self)
 				return
 			case <-timeout:
 				err := WaitOrErr(broker.Client.Publish(request, 1, false, payload))
@@ -90,7 +91,7 @@ func newChanMux(broker *Broker, station string, listener chan types.WeatherMessa
 		}
 	}
 
-	go sendUpdates()
+	go keepAlive()
 
 	return self, nil
 }
