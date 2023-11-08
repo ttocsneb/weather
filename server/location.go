@@ -457,6 +457,7 @@ func LocationConditionsUpdateRoute(db *sql.DB, brokers map[string]stations.Broke
 			w.Header().Set("Connection", "keep-alive")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
 
 			updateConditions()
 

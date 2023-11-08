@@ -176,6 +176,7 @@ func StationRapidUpdatesRoute(db *sql.DB, brokers map[string]stations.Broker, r 
 			w.Header().Set("Connection", "keep-alive")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
 
 			for {
 				select {
@@ -220,6 +221,13 @@ func StationUpdatesRoute(db *sql.DB, brokers map[string]stations.Broker, r *mux.
 				return
 			}
 
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
+
 			updates := make(chan types.WeatherMessage)
 			defer func() {
 				broker.UnsubscribeWeatherUpdates(station, updates)
@@ -227,12 +235,6 @@ func StationUpdatesRoute(db *sql.DB, brokers map[string]stations.Broker, r *mux.
 			}()
 
 			broker.SubscribeWeatherUpdates(station, updates)
-
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("Connection", "keep-alive")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.WriteHeader(200)
 
 			for {
 				select {
