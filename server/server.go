@@ -32,6 +32,7 @@ func Serve(port uint16, db *sql.DB, brokers map[string]stations.Broker) {
 	NearestStationRoute(db, r)
 	LocationConditionsRoute(db, r)
 	LocationConditionsUpdateRoute(db, brokers, r)
+	RegionSearchRoute(db, r)
 	RegionConditionsRoute(db, r)
 	RegionConditionsUpdateRoute(db, brokers, r)
 

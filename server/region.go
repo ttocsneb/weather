@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,113 +12,187 @@ import (
 	"github.com/ttocsneb/weather/database"
 	"github.com/ttocsneb/weather/stations"
 	"github.com/ttocsneb/weather/types"
+	"github.com/ttocsneb/weather/util"
 )
 
-func findRegionStations(db *sql.DB, district *string, city *string, region *string, country *string) ([]types.StationEntry, error) {
+func findRegionStations(db *sql.DB, district string, city string, region string, country string) ([]types.StationEntry, error) {
 	conditions := []string{}
 	args := []interface{}{}
-	if district != nil {
-		conditions = append(conditions, fmt.Sprintf("district.value = ?"))
-		args = append(args, *district)
+	if district != "" {
+		conditions = append(conditions, fmt.Sprintf("district.value LIKE ?"))
+		args = append(args, district)
 	}
-	if city != nil {
-		conditions = append(conditions, fmt.Sprintf("city.value = ?"))
-		args = append(args, *city)
+	if city != "" {
+		conditions = append(conditions, fmt.Sprintf("city.value LIKE ?"))
+		args = append(args, city)
 	}
-	if region != nil {
-		conditions = append(conditions, fmt.Sprintf("region.value = ?"))
-		args = append(args, *region)
+	if region != "" {
+		conditions = append(conditions, fmt.Sprintf("region.value LIKE ?"))
+		args = append(args, region)
 	}
-	if country != nil {
-		conditions = append(conditions, fmt.Sprintf("country.value = ?"))
-		args = append(args, *country)
+	if country != "" {
+		conditions = append(conditions, fmt.Sprintf("country.value LIKE ?"))
+		args = append(args, country)
 	}
 	query := fmt.Sprintf(`WHERE %v`, strings.Join(conditions, " AND "))
 
 	return database.QueryStationInfos(db, query, args...)
 }
 
-func searchRegion(db *sql.DB, district *string, city *string, region *string, country *string) (int, error) {
+type searchResult struct {
+	Country  string `json:"country"`
+	Region   string `json:"region"`
+	City     string `json:"city"`
+	District string `json:"district"`
+}
+
+func searchForRegion(db *sql.DB, vals ...string) ([]searchResult, error) {
+	args := []any{}
 	conditions := []string{}
-	args := []interface{}{}
-	if district != nil {
-		conditions = append(conditions, fmt.Sprintf("district.value = ?"))
-		args = append(args, *district)
+
+	option := func(country string, region string, city string, district string) {
+		region_conds := []string{}
+
+		if country != "" {
+			region_conds = append(region_conds, fmt.Sprintf("country.value LIKE ?"))
+			args = append(args, country)
+		}
+		if region != "" {
+			region_conds = append(region_conds, fmt.Sprintf("region.value LIKE ?"))
+			args = append(args, region)
+		}
+		if city != "" {
+			region_conds = append(region_conds, fmt.Sprintf("city.value LIKE ?"))
+			args = append(args, city)
+		}
+		if district != "" {
+			region_conds = append(region_conds, fmt.Sprintf("district.value LIKE ?"))
+			args = append(args, district)
+		}
+
+		conditions = append(conditions, fmt.Sprintf("( %v )", strings.Join(region_conds, " AND ")))
 	}
-	if city != nil {
-		conditions = append(conditions, fmt.Sprintf("city.value = ?"))
-		args = append(args, *city)
+
+	if len(vals) == 1 {
+		option("", "", vals[0], "")
+		option("", "", "", vals[0])
+	} else if len(vals) == 2 {
+		option(vals[0], "", vals[1], "")
+		option(vals[0], "", "", vals[1])
+		option("", vals[0], vals[1], "")
+		option("", vals[0], "", vals[1])
+		option("", "", vals[0], vals[1])
+
+		option(vals[1], "", vals[0], "")
+		option(vals[1], "", "", vals[0])
+		option("", vals[1], vals[0], "")
+		option("", vals[1], "", vals[0])
+		option("", "", vals[1], vals[0])
+	} else if len(vals) == 3 {
+		option(vals[0], vals[1], vals[2], "")
+		option(vals[0], vals[1], "", vals[2])
+		option(vals[0], "", vals[1], vals[2])
+		option("", vals[0], vals[1], vals[2])
+
+		option(vals[2], vals[1], vals[0], "")
+		option(vals[2], vals[1], "", vals[0])
+		option(vals[2], "", vals[1], vals[0])
+		option("", vals[2], vals[1], vals[0])
+	} else if len(vals) == 4 {
+		option(vals[0], vals[1], vals[2], vals[4])
+		option(vals[3], vals[2], vals[1], vals[0])
+	} else {
+		return nil, errors.New("Must have between 1 and 4 value parameters")
 	}
-	if region != nil {
-		conditions = append(conditions, fmt.Sprintf("region.value = ?"))
-		args = append(args, *region)
-	}
-	if country != nil {
-		conditions = append(conditions, fmt.Sprintf("country.value = ?"))
-		args = append(args, *country)
-	}
+
 	query := fmt.Sprintf(
-		`SELECT DISTINCT district.value, city.value, region.value, country.value 
+		`SELECT DISTINCT country.value, region.value, city.value, district.value 
 		FROM station 
 		%v 
 		WHERE %v;`,
 		database.GenStringJoins(
 			"station", "district", "city", "region", "country"),
-		strings.Join(conditions, " AND "))
+		strings.Join(conditions, " OR "))
+
+	fmt.Println(query)
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	count := 0
+	output := []searchResult{}
 	for rows.Next() {
-		count += 1
+		var country string
+		var region string
+		var city string
+		var district string
+		err = rows.Scan(&country, &region, &city, &district)
+		if err != nil {
+			return nil, err
+		}
+
+		output = append(output, searchResult{country, region, city, district})
 	}
 
-	return count, nil
+	return output, nil
+}
+
+func RegionSearchRoute(db *sql.DB, r *mux.Router) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+
+		items := []string{}
+
+		a, _ := util.DecodeURIString(query.Get("a"))
+		if a != "" {
+			items = append(items, a)
+		}
+		b, _ := util.DecodeURIString(query.Get("b"))
+		if b != "" {
+			items = append(items, b)
+		}
+		c, _ := util.DecodeURIString(query.Get("c"))
+		if c != "" {
+			items = append(items, c)
+		}
+		d, _ := util.DecodeURIString(query.Get("d"))
+		if d != "" {
+			items = append(items, d)
+		}
+
+		regions, err := searchForRegion(db, items...)
+		if err != nil {
+			ErrorMessage(w, 500, "Internal Server Error")
+			fmt.Printf("Could not search region: %v\n", err)
+			return
+		}
+
+		data, err := json.Marshal(regions)
+		if err != nil {
+			ErrorMessage(w, 500, "Internal Server Error")
+			fmt.Printf("Could not marshal search region: %v\n", err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(data)
+	}
+	r.HandleFunc("/region/search/",
+		handler)
 }
 
 func RegionConditionsRoute(db *sql.DB, r *mux.Router) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 
-		query := r.URL.Query()
-		var country *string = nil
-		if query.Has("country") {
-			country_var := query.Get("country")
-			country = &country_var
-		}
-		var region *string = nil
-		if query.Has("region") {
-			region_var := query.Get("region")
-			region = &region_var
-		}
-		var city *string = nil
-		if query.Has("city") {
-			city_var := query.Get("city")
-			city = &city_var
-		}
-		var district *string = nil
-		if query.Has("district") {
-			district_var := query.Get("district")
-			district = &district_var
-		}
+		vars := mux.Vars(r)
 
-		locations, err := searchRegion(db, district, city, region, country)
-		if err != nil {
-			ErrorMessage(w, 500, "Internal Server Error")
-			fmt.Printf("Could not search region: %v\n", err)
-			return
-		}
-		if locations > 1 {
-			ErrorMessage(w, 400, "Region is ambiguous, be more specific")
-			return
-		}
-		if locations == 0 {
-			ErrorMessage(w, 404, "Region not found")
-			return
-		}
+		country, _ := util.DecodeURIString(vars["country"])
+		region, _ := util.DecodeURIString(vars["region"])
+		city, _ := util.DecodeURIString(vars["city"])
+		district, _ := util.DecodeURIString(vars["district"])
 
 		stations, err := findRegionStations(db, district, city, region, country)
 		if len(stations) == 0 {
@@ -155,50 +230,21 @@ func RegionConditionsRoute(db *sql.DB, r *mux.Router) {
 		w.WriteHeader(200)
 		w.Write(data)
 	}
-	r.HandleFunc("/region/conditions/",
-		handler)
+
+	r.HandleFunc("/region/conditions/{country}/{region}/{city}/", handler)
+	r.HandleFunc("/region/conditions/{country}/{region}/{city}/{district}/", handler)
 }
 
 func RegionConditionsUpdateRoute(db *sql.DB, brokers map[string]stations.Broker, r *mux.Router) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 
-		query := r.URL.Query()
-		var country *string = nil
-		if query.Has("country") {
-			country_var := query.Get("country")
-			country = &country_var
-		}
-		var region *string = nil
-		if query.Has("region") {
-			region_var := query.Get("region")
-			region = &region_var
-		}
-		var city *string = nil
-		if query.Has("city") {
-			city_var := query.Get("city")
-			city = &city_var
-		}
-		var district *string = nil
-		if query.Has("district") {
-			district_var := query.Get("district")
-			district = &district_var
-		}
+		vars := mux.Vars(r)
 
-		locations, err := searchRegion(db, district, city, region, country)
-		if err != nil {
-			ErrorMessage(w, 500, "Internal Server Error")
-			fmt.Printf("Could not search region: %v\n", err)
-			return
-		}
-		if locations > 1 {
-			ErrorMessage(w, 400, "Region is ambiguous, be more specific")
-			return
-		}
-		if locations == 0 {
-			ErrorMessage(w, 404, "Region not found")
-			return
-		}
+		country, _ := util.DecodeURIString(vars["country"])
+		region, _ := util.DecodeURIString(vars["region"])
+		city, _ := util.DecodeURIString(vars["city"])
+		district, _ := util.DecodeURIString(vars["district"])
 
 		stations, err := findRegionStations(db, district, city, region, country)
 		if len(stations) == 0 {
@@ -317,6 +363,6 @@ func RegionConditionsUpdateRoute(db *sql.DB, brokers map[string]stations.Broker,
 			}
 		}
 	}
-	r.HandleFunc("/region/conditions/updates/",
-		handler)
+	r.HandleFunc("/region/conditions/updates/{country}/{region}/{city}/", handler)
+	r.HandleFunc("/region/conditions/updates/{country}/{region}/{city}/{district}/", handler)
 }

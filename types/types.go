@@ -6,8 +6,8 @@ import (
 )
 
 type StationKey struct {
-	Server  string
-	Station string
+	Server  string `json:"server"`
+	Station string `json:"station"`
 }
 
 type SensorValue struct {
@@ -22,10 +22,10 @@ type WeatherMessage struct {
 }
 
 type WeatherEntry struct {
-	Station string
-	Server  string
-	Time    time.Time
-	Sensors map[string][]SensorValue
+	Station string                   `json:"station"`
+	Server  string                   `json:"server"`
+	Time    time.Time                `json:"time"`
+	Sensors map[string][]SensorValue `json:"sensors"`
 }
 
 func (self *WeatherMessage) ToEntry(server string) WeatherEntry {
@@ -57,21 +57,21 @@ type StationMessage struct {
 }
 
 type StationEntry struct {
-	Server       string
-	Station      string
-	Make         string
-	Model        string
-	Software     string
-	Version      string
-	Latitude     float64
-	Longitude    float64
-	Elevation    float64
-	District     string
-	City         string
-	Region       string
-	Country      string
-	RapidWeather bool
-	Updated      time.Time
+	Server       string    `json:"server"`
+	Station      string    `json:"Station"`
+	Make         string    `json:"make"`
+	Model        string    `json:"model"`
+	Software     string    `json:"software"`
+	Version      string    `json:"version"`
+	Latitude     float64   `json:"latitude"`
+	Longitude    float64   `json:"longitude"`
+	Elevation    float64   `json:"elevation"`
+	District     string    `json:"district"`
+	City         string    `json:"city"`
+	Region       string    `json:"region"`
+	Country      string    `json:"country"`
+	RapidWeather bool      `json:"rapidWeather"`
+	Updated      time.Time `json:"updated"`
 }
 
 func (self *StationEntry) MapId() string {
