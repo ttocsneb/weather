@@ -33,8 +33,8 @@ func Serve(port uint16, db *sql.DB, brokers map[string]stations.Broker) {
 	LocationConditionsRoute(db, r)
 	LocationConditionsUpdateRoute(db, brokers, r)
 	RegionSearchRoute(db, r)
-	RegionConditionsRoute(db, r)
 	RegionConditionsUpdateRoute(db, brokers, r)
+	RegionConditionsRoute(db, r)
 
 	fmt.Printf("Starting server on port %v\n", port)
 
