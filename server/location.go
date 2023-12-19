@@ -220,10 +220,18 @@ func LocationConditionsRoute(db *sql.DB, r *mux.Router) {
 				values := make(map[string]types.SensorValue)
 
 				for name, sensors := range entries[0].Sensors {
-					val, unit := util.NormalizeSensor(sensors[0].Value, sensors[0].Unit, name)
+					val, unit := util.SensorToMetric(sensors[0].Value, sensors[0].Unit, name)
 					values[name] = types.SensorValue{
 						Unit:  unit,
 						Value: val,
+					}
+				}
+
+				for name, sensor := range values {
+					value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+					values[name] = types.SensorValue{
+						Unit:  unit,
+						Value: value,
 					}
 				}
 
@@ -245,6 +253,14 @@ func LocationConditionsRoute(db *sql.DB, r *mux.Router) {
 				weight_mappings[map_ids[i]] = weight
 			}
 			average_values := averageConditions(entries, weight_mappings)
+
+			for name, sensor := range average_values {
+				value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+				average_values[name] = types.SensorValue{
+					Unit:  unit,
+					Value: value,
+				}
+			}
 
 			data, err := json.Marshal(average_values)
 			if err != nil {
@@ -290,7 +306,7 @@ func averageConditions(conditions []types.WeatherEntry, weights map[string]float
 	for _, entry := range conditions {
 		weight := weights[entry.MapId()]
 		for name, sensors := range entry.Sensors {
-			val, unit := util.NormalizeSensor(sensors[0].Value, sensors[0].Unit, name)
+			val, unit := util.SensorToMetric(sensors[0].Value, sensors[0].Unit, name)
 			v, exists := value_list[name]
 			if !exists {
 				v = foo{
@@ -440,6 +456,13 @@ func LocationConditionsUpdateRoute(db *sql.DB, brokers map[string]stations.Broke
 				}
 
 				vals := averageConditions(entries, weight_mapping)
+				for name, sensor := range vals {
+					value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+					vals[name] = types.SensorValue{
+						Unit:  unit,
+						Value: value,
+					}
+				}
 
 				data, err := json.Marshal(vals)
 				if err != nil {

@@ -31,55 +31,6 @@ func DistToLatLon(lon float64, dist float64) (float64, float64) {
 		math.Abs(ratio * (180 / math.Pi) / math.Cos(lon*(math.Pi/180)))
 }
 
-func NormalizeSensor(value float64, unit string, sensor_hint string) (float64, string) {
-	unit = strings.ToLower(unit)
-	switch sensor_hint {
-	case "uv":
-		unit = "uv"
-	}
-	switch unit {
-	case "m/h", "mph":
-		unit = "mps"
-		value = value / 2.236936
-	case "mps", "m/s":
-		unit = "mps"
-	case "c":
-		unit = "c"
-	case "f":
-		unit = "c"
-		value = (value - 32) * 5.0 / 9.0
-	case "in":
-		unit = "mm"
-		value = value / 25.4
-	case "mm":
-		unit = "mm"
-	case "nm":
-		unit = "km"
-		value = value * 1.852
-	case "mi":
-		unit = "km"
-		value = value * 1.609344
-	case "km":
-		unit = "km"
-	case "inhg":
-		unit = "hpa"
-		value = value * 33.86389
-	case "torr":
-		unit = "hpa"
-		value = value * 1.3332236842105
-	case "hpa":
-		unit = "hpa"
-	case "%", "pct":
-		unit = "%"
-	case "deg":
-		unit = "deg"
-	case "rad":
-		unit = "deg"
-		value = value * 180.0 / math.Pi
-	}
-	return value, unit
-}
-
 func AverageWeights(values []float64, weights []float64) float64 {
 	total := 0.
 	weight_sum := 0.

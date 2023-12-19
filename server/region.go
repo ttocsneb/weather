@@ -219,6 +219,13 @@ func RegionConditionsRoute(db *sql.DB, r *mux.Router) {
 		}
 
 		results := averageConditions(entries, weight_map)
+		for name, sensor := range results {
+			value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+			results[name] = types.SensorValue{
+				Unit:  unit,
+				Value: value,
+			}
+		}
 
 		data, err := json.Marshal(results)
 		if err != nil {
@@ -332,6 +339,13 @@ func RegionConditionsUpdateRoute(db *sql.DB, brokers map[string]stations.Broker,
 			}
 
 			vals := averageConditions(entries, weight_map)
+			for name, sensor := range vals {
+				value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+				vals[name] = types.SensorValue{
+					Unit:  unit,
+					Value: value,
+				}
+			}
 
 			data, err := json.Marshal(vals)
 			if err != nil {

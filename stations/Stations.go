@@ -44,7 +44,7 @@ func newChanMux(broker *Broker, station string, listener chan types.WeatherMessa
 		for sensor, values := range payload.Sensors {
 			message.Sensors[sensor] = make([]types.SensorValue, len(values))
 			for i, value := range values {
-				val, unit := util.NormalizeSensor(value.Value, value.Unit, sensor)
+				val, unit := util.SensorToMetric(value.Value, value.Unit, sensor)
 				message.Sensors[sensor][i] = types.SensorValue{
 					Unit:  unit,
 					Value: val,
@@ -145,7 +145,7 @@ func (self *Broker) WeatherListener() mqtt.MessageHandler {
 		for sensor, values := range payload.Sensors {
 			message.Sensors[sensor] = make([]types.SensorValue, len(values))
 			for i, value := range values {
-				val, unit := util.NormalizeSensor(value.Value, value.Unit, sensor)
+				val, unit := util.SensorToMetric(value.Value, value.Unit, sensor)
 				message.Sensors[sensor][i] = types.SensorValue{
 					Unit:  unit,
 					Value: val,

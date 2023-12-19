@@ -12,6 +12,7 @@ import (
 	"github.com/ttocsneb/weather/database"
 	"github.com/ttocsneb/weather/stations"
 	"github.com/ttocsneb/weather/types"
+	"github.com/ttocsneb/weather/util"
 )
 
 func StationConditionsRoute(db *sql.DB, r *mux.Router) {
@@ -31,6 +32,16 @@ func StationConditionsRoute(db *sql.DB, r *mux.Router) {
 				ErrorMessage(w, 404, "Station not found")
 				fmt.Printf("Could not fetch entry: %v\n", err)
 				return
+			}
+
+			for name, sensors := range entry.Sensors {
+				for i, sensor := range sensors {
+					value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+					sensors[i] = types.SensorValue{
+						Unit:  unit,
+						Value: value,
+					}
+				}
 			}
 
 			data, err := json.Marshal(entry)
@@ -181,6 +192,15 @@ func StationRapidUpdatesRoute(db *sql.DB, brokers map[string]stations.Broker, r 
 			for {
 				select {
 				case message := <-updates:
+					for name, sensors := range message.Sensors {
+						for i, sensor := range sensors {
+							value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+							sensors[i] = types.SensorValue{
+								Unit:  unit,
+								Value: value,
+							}
+						}
+					}
 					content, err := json.Marshal(message)
 					if err != nil {
 						fmt.Printf("Could not marshal message: %v\n", err)
@@ -239,6 +259,15 @@ func StationUpdatesRoute(db *sql.DB, brokers map[string]stations.Broker, r *mux.
 			for {
 				select {
 				case message := <-updates:
+					for name, sensors := range message.Sensors {
+						for i, sensor := range sensors {
+							value, unit := util.SensorToImperial(sensor.Value, sensor.Unit, name)
+							sensors[i] = types.SensorValue{
+								Unit:  unit,
+								Value: value,
+							}
+						}
+					}
 					content, err := json.Marshal(message)
 					if err != nil {
 						fmt.Printf("Could not marshal message: %v\n", err)
